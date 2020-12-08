@@ -1,18 +1,25 @@
 const fs = require("fs");
 const {createInterface} = require("readline");
-const {once} = require("events");
 
-const readFile = async (file, downstreamFunction) => {
-    const rl = createInterface({
+const readFile = (file) => {
+    const readLineStream = createInterface({
         input: fs.createReadStream(file),
         crlfDelay: Infinity
     });
 
-    rl.addListener("line", (data) => {
-        downstreamFunction(data);
-    });
+    this.thenCall = (downstreamFunction) => {
+        readLineStream.on("line", downstreamFunction);
+        return this;
+    };
 
-    await once(rl, "close");
+    this.waitUntilClose = async (waitOnce) => {
+        await waitOnce(readLineStream);
+    };
+
+    return {
+        thenCall: this.thenCall,
+        waitUntilClose: this.waitUntilClose
+    }
 };
 
 module.exports = {

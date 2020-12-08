@@ -1,5 +1,6 @@
 const fs = require("fs/promises");
-const directoryReader = require("../src/directoryReader");
+const {readDirectory} = require("../src/directoryReader");
+const events = require("events");
 
 describe("Given the directory reader module", () => {
 
@@ -10,7 +11,8 @@ describe("Given the directory reader module", () => {
             const downStreamFunction = jest.fn().mockName("downStreamFunction");
             const isDirectoryMockFn = jest.fn(() => true).mockName("isDirectoryMockFn");
             const isFileMockFn = jest.fn(() => true).mockName("isFileMockFn");
-            const spyOnOpendir = jest.spyOn(fs, "opendir");
+            const spyOnOpendir = jest.spyOn(fs, "opendir").mockName("spyOnOpendir");
+            const spyOnOnce = jest.spyOn(events, "once").mockName("spyOnOnce");
 
             spyOnOpendir.mockImplementationOnce(args => {
                 return [Promise.resolve({
@@ -26,12 +28,15 @@ describe("Given the directory reader module", () => {
             });
 
             //Act
-            await directoryReader.readDirectory("./test/resources", downStreamFunction);
+            await readDirectory("./test/resources")
+                .then(directoryStream => directoryStream.thenCall(downStreamFunction))
+                .then(directoryStream => directoryStream.waitUntilClose((stream) => events.once(stream, "close")));
 
             //Assert
-            expect(isDirectoryMockFn).toBeCalled();
-            expect(isFileMockFn).toBeCalled();
+            expect(isDirectoryMockFn).toBeCalledTimes(1);
+            expect(isFileMockFn).toBeCalledTimes(1);
             expect(downStreamFunction).toBeCalled();
+            expect(spyOnOnce).toBeCalledTimes(1);
 
         });
 
