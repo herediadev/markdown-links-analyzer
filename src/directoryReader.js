@@ -6,7 +6,7 @@ const readDirectory = async function (path, downStreamFunction) {
     const directoryRead = await fs.opendir(resolvedPath);
 
     for await (const entry of directoryRead) {
-        const absolutePath = resolve(__dirname, path, entry.name);
+        const absolutePath = resolvedPath + "/" + entry.name;
         if (entry.isDirectory()) {
             await readDirectory(absolutePath, downStreamFunction);
         } else if (entry.isFile()) {

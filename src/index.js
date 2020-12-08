@@ -4,6 +4,8 @@ const {readFile} = require("./fileReader");
 
 (async () => {
     await readDirectory("../test",
-        (file) => readFile(file, (data) => console.log(data)))
+        (file) =>
+            readFile(file, (data) =>
+                console.log(data)))
 })();
 
