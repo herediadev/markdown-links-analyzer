@@ -10,7 +10,7 @@ const processDirectory = directoryStream => directoryStream.thenCall(readFileDow
 
 readDirectory("../test")
     .then(processDirectory)
-    .then(stremDirectory => stremDirectory.waitUntilClose(wait));
+    .then(streamDirectory => streamDirectory.waitUntilClose(wait));
 
 
 
