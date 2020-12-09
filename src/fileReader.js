@@ -1,6 +1,7 @@
 const fs = require("fs");
 const {createInterface} = require("readline");
 const {Readable, Transform} = require("stream");
+const events = require("events");
 
 const readFile = (file) => {
     const readLineStream = createInterface({
@@ -36,11 +37,11 @@ const readFile = (file) => {
         return this;
     };
 
-    this.execute = async (wait) => {
+    this.execute = async () => {
         readLineStream.on("line", line => stream.push(line));
         readLineStream.on("close", () => stream.push(null));
 
-        await wait(stream);
+        await events.once(stream, "close");
     }
 
     return {

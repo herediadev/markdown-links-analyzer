@@ -1,4 +1,5 @@
 const fs = require("fs/promises");
+const events = require("events");
 const {resolve} = require("path");
 const {Readable} = require("stream");
 
@@ -8,10 +9,10 @@ const readDirectory = async function (path) {
     const readableDirectoryStream = Readable.from(directoryRead);
 
     this.thenCall = (downStreamFunction) => {
-        readableDirectoryStream.on("data", (data) => {
+        readableDirectoryStream.on("data", async (data) => {
             const absolutePath = resolvedPath + "/" + data.name;
             if (data.isDirectory()) {
-                readDirectory(absolutePath).then(directoryStream => directoryStream.thenCall(downStreamFunction));
+                await readDirectory(absolutePath).then(directoryStream => directoryStream.thenCall(downStreamFunction));
             } else if (data.isFile()) {
                 downStreamFunction(absolutePath);
             }
@@ -20,8 +21,8 @@ const readDirectory = async function (path) {
         return this;
     };
 
-    this.waitUntilClose = async (wait) => {
-        await wait(readableDirectoryStream);
+    this.waitUntilClose = async () => {
+        await events.once(readableDirectoryStream, "close");
     }
 
     return {
