@@ -28,15 +28,15 @@ describe("Given the directory reader module", () => {
             });
 
             //Act
-            await readDirectory("./test/resources")
-                .then(directoryStream => directoryStream.thenCall(downStreamFunction))
-                .then(directoryStream => directoryStream.waitUntilClose((stream) => events.once(stream, "close")));
+            const directoryStream = readDirectory("./test/resources");
+            await directoryStream.process(downStreamFunction);
+
 
             //Assert
             expect(isDirectoryMockFn).toBeCalledTimes(1);
             expect(isFileMockFn).toBeCalledTimes(1);
             expect(downStreamFunction).toBeCalled();
-            expect(spyOnOnce).toBeCalledTimes(1);
+            expect(spyOnOnce).toBeCalledTimes(2);
 
         });
 
