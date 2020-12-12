@@ -1,10 +1,10 @@
 const fs = require("fs/promises");
-const {resolve} = require("path");
+const path = require("path");
 const {Readable, Transform} = require("stream");
 const {pipeline} = require("stream/promises");
 
-const readDirectory = (path, passTransform = []) => {
-    const resolvedPath = resolve(__dirname, path);
+const readDirectory = (dirPath, passTransform = []) => {
+    const resolvedPath = path.resolve(__dirname, dirPath);
     const subDirectories = [];
     const transforms = passTransform;
 
@@ -22,19 +22,24 @@ const readDirectory = (path, passTransform = []) => {
     });
 
     this.transform = (transformFunction) => {
-        transforms.push(transformFunction);
+        transforms.push((chunk, encoding, callback) => {
+            callback(null, transformFunction(chunk));
+        });
+        return this;
+    };
+
+    this.onData = (transformFunction) => {
+        transforms.push((chunk, encoding, callback) => {
+            transformFunction(chunk);
+            callback(null, chunk);
+        });
         return this;
     };
 
     this.execute = async () => {
         const directoryStream = await fs.opendir(resolvedPath);
         const readableDirectoryStream = Readable.from(directoryStream);
-        const pipes = transforms.map(transformFunction => new Transform({
-            objectMode: true,
-            transform(chunk, encoding, callback) {
-                callback(null, transformFunction(chunk));
-            }
-        }));
+        const pipes = transforms.map(transform => new Transform({objectMode: true, transform: transform}));
 
         await pipeline([
                 readableDirectoryStream,
@@ -44,13 +49,13 @@ const readDirectory = (path, passTransform = []) => {
         );
 
         for (const subDirectory of subDirectories) {
-            const subDirectoryStream = readDirectory(subDirectory, transforms);
-            await subDirectoryStream.execute();
+            await readDirectory(subDirectory, transforms).execute();
         }
     };
 
     return {
         transform: this.transform,
+        onData: this.onData,
         execute: this.execute,
     }
 
