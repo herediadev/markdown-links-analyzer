@@ -1,30 +1,39 @@
 const fs = require("fs/promises");
 const events = require("events");
 const {resolve} = require("path");
-const {Readable} = require("stream");
+const {Readable, Transform} = require("stream");
+const {pipeline} = require("stream/promises");
 
-const readDirectory = function (path) {
+const readDirectory = async (path) => {
     const resolvedPath = resolve(__dirname, path);
+    const directoryStream = await fs.opendir(resolvedPath);
+    const subDirectories = [];
 
-    this.process = async (downStreamFunction) => {
-        const directoryRead = await fs.opendir(resolvedPath);
-        const readableDirectoryStream = Readable.from(directoryRead)
-            .on("data", async (data) => {
-            const absolutePath = resolvedPath + "/" + data.name;
-            if (data.isDirectory()) {
-                const directoryStream = readDirectory(absolutePath);
-                await directoryStream.process(downStreamFunction);
-            } else if (data.isFile()) {
-                downStreamFunction(absolutePath);
+    const transform = new Transform({
+        objectMode: true,
+        transform(chunk, encoding, callback) {
+            if (chunk.isDirectory()) {
+                const subDirectory = `${path}/${chunk.name}`;
+                subDirectories.push(subDirectory);
+                callback();
+            } else {
+                console.log(chunk);
+                callback(null, chunk);
             }
-        });
+        }
+    });
+    const readableDirectoryStream = Readable.from(directoryStream);
 
-        await events.once(readableDirectoryStream, "close");
-    };
+    await pipeline([
+            readableDirectoryStream,
+            transform
+        ]
+    );
 
-    return {
-        process: this.process,
+    for (const subDirectory of subDirectories) {
+        await readDirectory(subDirectory);
     }
+
 };
 
 module.exports = {
