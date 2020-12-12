@@ -1,37 +1,57 @@
 const fs = require("fs/promises");
-const events = require("events");
 const {resolve} = require("path");
 const {Readable, Transform} = require("stream");
 const {pipeline} = require("stream/promises");
 
-const readDirectory = async (path) => {
+const readDirectory = (path, passTransform = []) => {
     const resolvedPath = resolve(__dirname, path);
-    const directoryStream = await fs.opendir(resolvedPath);
     const subDirectories = [];
+    const transforms = passTransform;
 
-    const transform = new Transform({
+    const checkSubDirectories = new Transform({
         objectMode: true,
         transform(chunk, encoding, callback) {
+            const newPath = `${resolvedPath}/${chunk.name}`;
             if (chunk.isDirectory()) {
-                const subDirectory = `${path}/${chunk.name}`;
-                subDirectories.push(subDirectory);
+                subDirectories.push(newPath);
                 callback();
-            } else {
-                console.log(chunk);
-                callback(null, chunk);
+            } else if (chunk.isFile()) {
+                callback(null, newPath);
             }
         }
     });
-    const readableDirectoryStream = Readable.from(directoryStream);
 
-    await pipeline([
-            readableDirectoryStream,
-            transform
-        ]
-    );
+    this.transform = (transformFunction) => {
+        transforms.push(transformFunction);
+        return this;
+    };
 
-    for (const subDirectory of subDirectories) {
-        await readDirectory(subDirectory);
+    this.execute = async () => {
+        const directoryStream = await fs.opendir(resolvedPath);
+        const readableDirectoryStream = Readable.from(directoryStream);
+        const pipes = transforms.map(transformFunction => new Transform({
+            objectMode: true,
+            transform(chunk, encoding, callback) {
+                callback(null, transformFunction(chunk));
+            }
+        }));
+
+        await pipeline([
+                readableDirectoryStream,
+                checkSubDirectories,
+                ...pipes,
+            ]
+        );
+
+        for (const subDirectory of subDirectories) {
+            const subDirectoryStream = readDirectory(subDirectory, transforms);
+            await subDirectoryStream.execute();
+        }
+    };
+
+    return {
+        transform: this.transform,
+        execute: this.execute,
     }
 
 };
