@@ -8,5 +8,6 @@ const printValues = (data) => console.log(data);
 const readFileDownStreamFunction = (file) => readFile(file).onEachLine(printValues).execute(wait);
 
 readDirectory("../test")
+    .recursiveMode()
     .transform(readFileDownStreamFunction)
     .execute();
