@@ -1,18 +1,19 @@
 const fs = require("fs/promises");
-const path = require("path");
-const {Readable, Transform} = require("stream");
-const {pipeline} = require("stream/promises");
+const events = require("events");
+const {resolve} = require("path");
+const {Readable, Transform, Writable, PassThrough, pipeline} = require("stream");
 
-const readDirectory = (dirPath, passTransform = [], recursiveMode = false) => {
-    const resolvedPath = path.resolve(__dirname, dirPath);
+let count = 0;
+
+const readDirectory = (path, transformFunctions = []) => {
     const subDirectories = [];
-    const transforms = passTransform;
-    let isRecursiveMode = recursiveMode;
+    const transforms = transformFunctions;
 
     this.transform = (transformFunction) => {
         transforms.push((chunk, encoding, callback) => {
             callback(null, transformFunction(chunk));
         });
+
         return this;
     };
 
@@ -23,64 +24,76 @@ const readDirectory = (dirPath, passTransform = [], recursiveMode = false) => {
             else
                 callback(null, chunk);
         });
+
         return this;
     };
 
-    this.onData = (onEachDataFunction) => {
+    this.onData = (onEachFunction) => {
         transforms.push((chunk, encoding, callback) => {
-            onEachDataFunction(chunk);
+            onEachFunction(chunk);
             callback(null, chunk);
         });
-        return this;
-    };
 
-    this.recursiveMode = () => {
-        isRecursiveMode = true;
         return this;
     };
 
     this.execute = async () => {
-        const directoryStream = await fs.opendir(resolvedPath);
-        const readableDirectoryStream = Readable.from(directoryStream);
-        const pipes = transforms.map(transform => new Transform({objectMode: true, transform: transform}));
+        const resolvedPath = resolve(__dirname, path);
+        const readableStream = createNewReadablePipeLine(transforms);
 
-        const checkSubDirectories = new Transform({
-            objectMode: true,
-            transform(chunk, encoding, callback) {
-                const newPath = `${resolvedPath}/${chunk.name}`;
-                if (chunk.isDirectory()) {
-                    if (isRecursiveMode)
-                        subDirectories.push(newPath);
-                    callback();
-                } else if (chunk.isFile()) {
-                    callback(null, newPath);
-                }
-            }
-        });
-
-        await pipeline([
-                readableDirectoryStream,
-                checkSubDirectories,
-                ...pipes,
-            ]
-        );
-
-        if (isRecursiveMode) {
-            for (const subDirectory of subDirectories) {
-                await readDirectory(subDirectory, transforms, isRecursiveMode).execute();
+        for await (const dir of await fs.opendir(resolvedPath)) {
+            const newPath = `${resolvedPath}/${dir.name}`;
+            if (dir.isDirectory()) {
+                console.log(++count)
+                subDirectories.push(path + "/" + dir.name);
+            } else if (dir.isFile()) {
+                readableStream.push({
+                    fileName: dir.name,
+                    filePath: newPath,
+                    resolvedPath,
+                });
             }
         }
-    };
+
+        for (const subDirectory of subDirectories) {
+            await readDirectory(subDirectory, transforms).execute();
+        }
+        readableStream.push(null);
+    }
 
     return {
-        recursiveMode: this.recursiveMode,
         filter: this.filter,
         transform: this.transform,
         onData: this.onData,
         execute: this.execute,
     }
-
 };
+
+function createNewReadablePipeLine(transforms = []) {
+    const readableStream = new Readable({
+        objectMode: true,
+        read(size) {
+        }
+    });
+    const pipes = transforms.map(transform => new Transform({
+        objectMode: true, transform
+    }));
+
+    pipeline([
+        readableStream,
+        new Transform({
+            objectMode: true,
+            transform(chunk, encoding, callback) {
+                //console.log(chunk);
+                callback(null, chunk);
+            }
+        }),
+        ...pipes
+    ], () => {
+        console.log("pipeline finished");
+    });
+    return readableStream;
+}
 
 module.exports = {
     readDirectory,

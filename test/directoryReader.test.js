@@ -2,6 +2,8 @@ const fs = require("fs/promises");
 const path = require("path");
 const {readDirectory} = require("../src/directoryReader");
 
+const wait = async (time) => new Promise(resolve => setTimeout(resolve, time));
+
 jest.mock("fs");
 jest.mock("path");
 
@@ -55,6 +57,8 @@ describe("Given the directory reader module", () => {
                 .transform(transformFunction2)
                 .onData(onDataFunction)
                 .execute();
+
+            await wait(2000);
 
             //Assert
             expect(filterFunction).toBeCalledTimes(3);
