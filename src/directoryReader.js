@@ -2,7 +2,7 @@ const fs = require("fs/promises");
 const {resolve} = require("path");
 const {Readable, Transform, pipeline} = require("stream");
 
-const readDirectory = (path, transformFunctions = []) => {
+function ReadDirectory(path, transformFunctions = []) {
     const subDirectories = [];
     const transforms = transformFunctions;
 
@@ -52,18 +52,13 @@ const readDirectory = (path, transformFunctions = []) => {
         }
 
         for (const subDirectory of subDirectories) {
-            await readDirectory(subDirectory, transforms).execute();
+            await new ReadDirectory(subDirectory, transforms).execute();
         }
         readableStream.push(null);
+
     }
 
-    return {
-        filter: this.filter,
-        transform: this.transform,
-        onData: this.onData,
-        execute: this.execute,
-    }
-};
+}
 
 function createNewReadablePipeLine(transforms = []) {
     const readableStream = new Readable({
@@ -92,5 +87,5 @@ function createNewReadablePipeLine(transforms = []) {
 }
 
 module.exports = {
-    readDirectory,
+    ReadDirectory,
 }
