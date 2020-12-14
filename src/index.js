@@ -2,13 +2,16 @@ const {readDirectory} = require("./directoryReader");
 const {readFile} = require("./fileReader");
 const {once} = require("events");
 
+const wait = stream => once(stream, "close");
 
-readDirectory("/Users/rafael/Workspace/Webstorm/markdown-links-analyzer/node_modules")
+const printValues = (data) => console.log(data);
+const readFileDownStreamFunction = (file) => readFile(file).onEachLine(printValues).execute(wait);
+
+readDirectory("../../markdown-links-analyzer/test")
     .onData(data => console.log(data))
     .filter(data => data.fileName === "fileReader.test.js")
     .filter(data => data.resolvedPath.includes("test/resources/folder1/more_resources"))
-    .transform(data => data.fileName + " onTransformFunction")
-    .onData(data => console.log(data + " onDataFunction"))
+    //.onData(data => readFileDownStreamFunction(data.filePath))
     .execute();
 
 

@@ -1,9 +1,6 @@
 const fs = require("fs/promises");
-const events = require("events");
 const {resolve} = require("path");
-const {Readable, Transform, Writable, PassThrough, pipeline} = require("stream");
-
-let count = 0;
+const {Readable, Transform, pipeline} = require("stream");
 
 const readDirectory = (path, transformFunctions = []) => {
     const subDirectories = [];
@@ -44,8 +41,7 @@ const readDirectory = (path, transformFunctions = []) => {
         for await (const dir of await fs.opendir(resolvedPath)) {
             const newPath = `${resolvedPath}/${dir.name}`;
             if (dir.isDirectory()) {
-                console.log(++count)
-                subDirectories.push(path + "/" + dir.name);
+                subDirectories.push(newPath);
             } else if (dir.isFile()) {
                 readableStream.push({
                     fileName: dir.name,
