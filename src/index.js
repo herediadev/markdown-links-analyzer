@@ -7,12 +7,23 @@ const wait = stream => once(stream, "close");
 const printValues = (data) => console.log(data);
 const readFileDownStreamFunction = (file) => readFile(file).onEachLine(printValues).execute(wait);
 
+function toList() {
+    const collection = [];
 
-new ReadDirectory("../../markdown-links-analyzer/test")
-    //.onData(data => console.log(data))
-    .filter(data => data.fileName === "fileReader.test.js")
-    .filter(data => data.resolvedPath.includes("test/resources/folder1/more_resources"))
-    .execute();
+    return {
+        acc: (data) => collection.push(data),
+        get: () => collection,
+    };
+}
+let counter = 0;
+new ReadDirectory("../../markdown-links-analyzer/node_modules")
+    .onData(data => console.log(data))
+    .transform((data) => data.fileName)
+    .onData(data => console.log(++counter))
+    //.transform((data) => data + " cuek")
+    //.filter(data => data.fileName === "fileReader.test.js")
+    //.filter(data => data.resolvedPath.includes("test/resources/folder1/more_resources"))
+    .execute(toList());
 
 
 

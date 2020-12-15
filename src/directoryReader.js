@@ -1,10 +1,34 @@
 const fs = require("fs/promises");
 const {resolve} = require("path");
-const {Readable, Transform, pipeline} = require("stream");
+const {Readable, Writable, Transform, pipeline} = require("stream");
 
-function ReadDirectory(path, transformFunctions = []) {
+let readEntry = function (resolvedPath, entry, subDirectories, readableStream) {
+    const newPath = `${resolvedPath}/${entry.name}`;
+    if (entry.isDirectory()) {
+        subDirectories.push(newPath);
+    } else if (entry.isFile()) {
+        readableStream.push({
+            fileName: entry.name,
+            filePath: newPath,
+            resolvedPath,
+        })
+    }
+};
+
+let readDir = async function (resolvedPath, readableStream, recursive) {
     const subDirectories = [];
-    const transforms = transformFunctions;
+
+    for await (const entry of await fs.opendir(resolvedPath)) {
+        readEntry(resolvedPath, entry, subDirectories, readableStream);
+    }
+
+    for (const subDirectory of subDirectories) {
+        await recursive(subDirectory, readableStream);
+    }
+};
+
+function ReadDirectory(path = null) {
+    const transforms = [];
 
     this.transform = (transformFunction) => {
         transforms.push((chunk, encoding, callback) => {
@@ -13,7 +37,6 @@ function ReadDirectory(path, transformFunctions = []) {
 
         return this;
     };
-
     this.filter = (filterFunction) => {
         transforms.push((chunk, encoding, callback) => {
             if (filterFunction(chunk))
@@ -24,7 +47,6 @@ function ReadDirectory(path, transformFunctions = []) {
 
         return this;
     };
-
     this.onData = (onEachFunction) => {
         transforms.push((chunk, encoding, callback) => {
             onEachFunction(chunk);
@@ -34,28 +56,20 @@ function ReadDirectory(path, transformFunctions = []) {
         return this;
     };
 
+    const recursive = async (subDirectory, readableStream) => {
+        const resolvedPath = resolve(__dirname, subDirectory);
+
+        await readDir(resolvedPath, readableStream, recursive);
+
+    };
+
     this.execute = async () => {
         const resolvedPath = resolve(__dirname, path);
         const readableStream = createNewReadablePipeLine(transforms);
 
-        for await (const dir of await fs.opendir(resolvedPath)) {
-            const newPath = `${resolvedPath}/${dir.name}`;
-            if (dir.isDirectory()) {
-                subDirectories.push(newPath);
-            } else if (dir.isFile()) {
-                readableStream.push({
-                    fileName: dir.name,
-                    filePath: newPath,
-                    resolvedPath,
-                });
-            }
-        }
+        await readDir(resolvedPath, readableStream, recursive);
 
-        for (const subDirectory of subDirectories) {
-            await new ReadDirectory(subDirectory, transforms).execute();
-        }
         readableStream.push(null);
-
     }
 
 }
@@ -72,14 +86,13 @@ function createNewReadablePipeLine(transforms = []) {
 
     pipeline([
         readableStream,
-        new Transform({
+        ...pipes,
+        new Writable({
             objectMode: true,
-            transform(chunk, encoding, callback) {
-                //console.log(chunk);
-                callback(null, chunk);
+            write(chunk, encoding, callback) {
+                callback();
             }
-        }),
-        ...pipes
+        })
     ], () => {
         console.log("pipeline finished");
     });
