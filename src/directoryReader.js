@@ -2,10 +2,10 @@ const fs = require("fs/promises");
 const {resolve} = require("path");
 const {Readable, Writable, Transform, pipeline} = require("stream");
 
-let readEntry = function (resolvedPath, entry, subDirectories, readableStream) {
+const readEntry = async (resolvedPath, entry, readableStream, recursive) => {
     const newPath = `${resolvedPath}/${entry.name}`;
     if (entry.isDirectory()) {
-        subDirectories.push(newPath);
+        await readDir(newPath, readableStream, recursive);
     } else if (entry.isFile()) {
         readableStream.push({
             fileName: entry.name,
@@ -15,17 +15,48 @@ let readEntry = function (resolvedPath, entry, subDirectories, readableStream) {
     }
 };
 
-let readDir = async function (resolvedPath, readableStream, recursive) {
-    const subDirectories = [];
-
+const readDir = async (resolvedPath, readableStream, recursive) => {
     for await (const entry of await fs.opendir(resolvedPath)) {
-        readEntry(resolvedPath, entry, subDirectories, readableStream);
-    }
-
-    for (const subDirectory of subDirectories) {
-        await recursive(subDirectory, readableStream);
+        await readEntry(resolvedPath, entry, readableStream, recursive);
     }
 };
+
+const recursive = async (subDirectory, readableStream) => {
+    const resolvedPath = resolve(__dirname, subDirectory);
+
+    await readDir(resolvedPath, readableStream, recursive);
+
+};
+
+const createNewReadablePipeLine = (transforms = []) => {
+    const readableStream = new Readable({
+        objectMode: true,
+        read(size) {
+        }
+    });
+
+    const pipes = transforms.map(transform => new Transform({
+        objectMode: true, transform
+    }));
+
+    const writeable = pipeline([
+        readableStream,
+        ...pipes,
+        new Transform({
+            objectMode: true,
+            transform(chunk, encoding, callback) {
+                callback(null,chunk);
+            }
+        })
+    ], () => {
+        console.log("pipeline finished");
+    });
+
+    return {
+        readableStream,
+        writeable
+    };
+}
 
 function ReadDirectory(path = null) {
     const transforms = [];
@@ -37,6 +68,7 @@ function ReadDirectory(path = null) {
 
         return this;
     };
+
     this.filter = (filterFunction) => {
         transforms.push((chunk, encoding, callback) => {
             if (filterFunction(chunk))
@@ -47,6 +79,7 @@ function ReadDirectory(path = null) {
 
         return this;
     };
+
     this.onData = (onEachFunction) => {
         transforms.push((chunk, encoding, callback) => {
             onEachFunction(chunk);
@@ -56,47 +89,19 @@ function ReadDirectory(path = null) {
         return this;
     };
 
-    const recursive = async (subDirectory, readableStream) => {
-        const resolvedPath = resolve(__dirname, subDirectory);
-
-        await readDir(resolvedPath, readableStream, recursive);
-
-    };
-
-    this.execute = async () => {
+    this.execute = async (collectFunction) => {
         const resolvedPath = resolve(__dirname, path);
-        const readableStream = createNewReadablePipeLine(transforms);
+        const stream = createNewReadablePipeLine(transforms);
 
-        await readDir(resolvedPath, readableStream, recursive);
+        collectFunction && stream.writeable.on("data",collectFunction.collect);
 
-        readableStream.push(null);
+        await readDir(resolvedPath, stream.readableStream, recursive);
+
+        stream.readableStream.push(null);
+
+        return collectFunction && collectFunction.get();
     }
 
-}
-
-function createNewReadablePipeLine(transforms = []) {
-    const readableStream = new Readable({
-        objectMode: true,
-        read(size) {
-        }
-    });
-    const pipes = transforms.map(transform => new Transform({
-        objectMode: true, transform
-    }));
-
-    pipeline([
-        readableStream,
-        ...pipes,
-        new Writable({
-            objectMode: true,
-            write(chunk, encoding, callback) {
-                callback();
-            }
-        })
-    ], () => {
-        console.log("pipeline finished");
-    });
-    return readableStream;
 }
 
 module.exports = {
